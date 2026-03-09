@@ -316,6 +316,7 @@ if st.session_state.best_res:
                 fig = draw_placements_interactive(bx, best["placements"])
                 fig.update_layout(height=800, margin=dict(l=0, r=0, b=0, t=40))
                 st.plotly_chart(fig, use_container_width=True, theme=None)
-                st.caption("💡 提示：按住鼠标左键旋转，右键平移，滚轮缩放。")
+                st.caption("📱 手机提示：单指旋转，双指捏合缩放，双指拖动平移。")
         else:
             st.info("请点击上方按钮加载 3D 交互式视图")
+
