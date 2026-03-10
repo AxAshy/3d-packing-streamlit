@@ -1,9 +1,9 @@
 import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
-import math
 import itertools
-import random
+import math
+# import random
 from dataclasses import dataclass
 from typing import List, Tuple
 
@@ -24,6 +24,27 @@ class Placement:
     pos: Tuple[float,float,float]
     dim: Tuple[float,float,float]
     box_id: str
+
+# 3d装箱用-箱子行政规格长宽+0.5cm，底边不变
+BOX_SPECS = {
+    "饰品1号箱": (17.5, 20.5, 3.5),
+    "饰品2号箱": (25.5, 25.0, 10.0),
+    "小1号箱": (27.5, 24.5, 20.0),
+    "1号箱": (30.5, 28.5, 22.0),
+    "2号箱": (30.5, 27.5, 28.0),
+    "16号箱2+1": (34.5, 28.5, 30.0),
+    "3号箱": (38.0, 30.0, 32.0),
+    "17号箱3+1": (39.5, 32.5, 32.0),
+    "4号箱": (41.5, 35.5, 28.5),
+    "18号箱4+1": (43.5, 38.5, 32.0),
+    "14号箱": (45.5, 40.5, 35.0),
+    "14+3": (54.0, 49.0, 27.0),
+    "14+1": (55.5, 50.5, 28.5),
+    "5号箱": (55.5, 50.5, 30.0),
+    "5+1": (57.5, 51.5, 32.0)
+}
+
+BOXES = [BoxType(name, *dims) for name, dims in BOX_SPECS.items()]
 
 def orientations(dim):
     l,w,h = dim
@@ -100,7 +121,7 @@ def pack_across_boxes(boxes, skus):
 
 
 
-def draw_placements_interactive(box: BoxType, placements: List[Placement]):
+def draw_placements_interactive(box: BoxType, placements: list[Placement]):
     """
     使用 Plotly 交互式显示装箱结果
     每个 SKU 用不同颜色显示 + 边界线 + 序号标记
@@ -128,17 +149,18 @@ def draw_placements_interactive(box: BoxType, placements: List[Placement]):
             z=[vertices_box[e[0],2], vertices_box[e[1],2]],
             mode="lines",
             line=dict(color="lightgrey", width=4),
-            showlegend=False
+            showlegend=False # 不要显示图例
         ))
 
     # === 绘制 SKU 长方体 ===
-    random.seed(42)
+    # random.seed(42)
     for idx, p in enumerate(placements):
-        cx, cy, cz = p.pos
-        cl, cw, ch = p.dim
-        color = f"rgb({random.randint(50,255)},{random.randint(50,255)},{random.randint(50,255)})"
+        cx, cy, cz = p.pos # 位置坐标
+        cl, cw, ch = p.dim # sku尺寸
+        length, weight, height = sorted(p.dim, reverse=True) # 获取长宽高的长度
+        # color = f"rgb({random.randint(50,255)},{random.randint(50,255)},{random.randint(50,255)})" # 颜色
 
-        # 顶点
+        # 定义单位立方体顶点
         vertices = np.array([
             [cx,     cy,     cz],
             [cx+cl,  cy,     cz],
@@ -149,30 +171,43 @@ def draw_placements_interactive(box: BoxType, placements: List[Placement]):
             [cx+cl,  cy+cw,  cz+ch],
             [cx,     cy+cw,  cz+ch]
         ])
+
+        # 按顶点索引定义六个面（四边形）
         faces = [
-            [0,1,2,3], [4,5,6,7], [0,1,5,4],
-            [2,3,7,6], [1,2,6,5], [0,3,7,4]
+            [0,1,2,3], # 底面
+            [4,5,6,7], # 顶面
+            [0,1,5,4], # 前面
+            [2,3,7,6], # 后面
+            [1,2,6,5], # 右面
+            [0,3,7,4]  # 左面
         ]
+
+        # 三角面索引（每个四边形拆成两个三角形）
         triangles = []
         for f in faces:
             triangles.append([f[0], f[1], f[2]])
             triangles.append([f[0], f[2], f[3]])
         i, j, k = zip(*triangles)
 
+        # sku箱体
         fig.add_trace(go.Mesh3d(
-            x=vertices[:,0], y=vertices[:,1], z=vertices[:,2],
-            i=i, j=j, k=k,
-            color=color, opacity=0.6,
+            x=vertices[:,0], y=vertices[:,1], z=vertices[:,2], # 指定8个顶点的坐标
+            i=i, j=j, k=k, # 指定12个三角形的顶点
+            color='white',
+            opacity=0.6,
             name=f"SKU-{idx+1}",
-            hovertext=f"SKU-{idx+1}<br>pos:{p.pos}<br>dim:{p.dim}",
+            hovertext=f"SKU-{idx+1}<br>pos:{p.pos}<br>dim:{p.dim}", # 工具提示
             hoverinfo="text"
         ))
 
-        # 边界线
-        edges = [(0,1),(1,2),(2,3),(3,0),
-                 (4,5),(5,6),(6,7),(7,4),
-                 (0,4),(1,5),(2,6),(3,7)]
-        for e in edges:
+        # 边线（可由面推导或直接指定）
+        edges = [(0,1),(1,2),
+                 (2,3),(3,0),
+                 (4,5),(5,6),
+                 (6,7),(7,4),
+                 (0,4),(1,5),
+                 (2,6),(3,7)]
+        for i, e in enumerate(edges):
             fig.add_trace(go.Scatter3d(
                 x=[vertices[e[0],0], vertices[e[1],0]],
                 y=[vertices[e[0],1], vertices[e[1],1]],
@@ -180,7 +215,31 @@ def draw_placements_interactive(box: BoxType, placements: List[Placement]):
                 mode="lines",
                 line=dict(color="black", width=3),
                 showlegend=False
-            ))
+            )) # 划线
+
+            if i in ([5, 6, 10]):
+                # 计算两点在三维空间内的距离
+                distance = math.sqrt((vertices[e[0],0] - vertices[e[1],0])**2 + (vertices[e[0],1] - vertices[e[1],1])**2 + (vertices[e[0],2] - vertices[e[1],2])**2)
+                if distance == length:
+                    text = '长'
+                elif distance == weight:
+                    text = '宽'
+                elif distance == height:
+                    text = '高'
+                else:
+                    text = ''
+
+                if text:
+                    fig.add_trace(go.Scatter3d(
+                        x=[vertices[e,0].mean()],
+                        y=[vertices[e,1].mean()],
+                        z=[vertices[e,2].mean()],
+                        mode="text",
+                        text=text,
+                        textfont=dict(color="red", size=12),
+                        showlegend=False
+                        )) # 文字标注
+            
 
         # 序号
         center = vertices.mean(axis=0)
@@ -193,83 +252,43 @@ def draw_placements_interactive(box: BoxType, placements: List[Placement]):
         ))
 
         # SKU 尺寸
-        fig.add_trace(go.Scatter3d(
-            x=[center[0] + cl*0.6],
-            y=[center[1] + cw*0.6],
-            z=[center[2] + ch*0.6],
-            mode="text",
-            text=[f"({cl}, {cw}, {ch})"],
-            textfont=dict(color="blue", size=14),
-            showlegend=False
-        ))
+        # fig.add_trace(go.Scatter3d(
+        #     x=[center[0] + cl*0.6],
+        #     y=[center[1] + cw*0.6],
+        #     z=[center[2] + ch*0.6],
+        #     mode="text",
+        #     text=[f"({cl}, {cw}, {ch})"],
+        #     textfont=dict(color="blue", size=14),
+        #     showlegend=False
+        # ))
 
     fig.update_layout(
         scene=dict(
-            xaxis=dict(title="长度 (cm)"),
-            yaxis=dict(title="宽度 (cm)"),
-            zaxis=dict(title="高度 (cm)"),
+            xaxis=dict(title=f"长 {box.l} cm"),
+            yaxis=dict(title=f"宽 {box.w} cm"),
+            zaxis=dict(title=f"高 {box.h} cm"),
             aspectmode="data"
         ),
         title=f"{box.id} - 交互式装箱可视化"
     )
 
-    fig.add_trace(go.Scatter3d(
-        x=[box.l/2], 
-        y=[box.w/2], 
-        z=[box.h + box.h*0.05],
-        mode="text",
-        text=[f"{box.id} ({box.l}, {box.w}, {box.h})"],
-        textfont=dict(color="red", size=16),
-        showlegend=False
-    ))
+    # 箱子尺寸
+    # fig.add_trace(go.Scatter3d(
+    #     x=[box.l/2], 
+    #     y=[box.w/2], 
+    #     z=[box.h + box.h*0.05],
+    #     mode="text",
+    #     text=[f"{box.id} ({box.l}, {box.w}, {box.h})"],
+    #     textfont=dict(color="red", size=16),
+    #     showlegend=False
+    # ))
 
     return fig
 
-
-# ====================== Streamlit 绘图逻辑 ======================
-# def draw_plotly_st(box, placements):
-#     fig = go.Figure()
-#     # 绘制外箱
-#     l, w, h = box.l, box.w, box.h
-#     v = np.array([[0,0,0],[l,0,0],[l,w,0],[0,w,0],[0,0,h],[l,0,h],[l,w,h],[0,w,h]])
-#     edges = [(0,1),(1,2),(2,3),(3,0),(4,5),(5,6),(6,7),(7,4),(0,4),(1,5),(2,6),(3,7)]
-#     for e in edges:
-#         fig.add_trace(go.Scatter3d(x=[v[e[0],0], v[e[1],0]], y=[v[e[0],1], v[e[1],1]], z=[v[e[0],2], v[e[1],2]], mode='lines', line=dict(color='black', width=2), showlegend=False))
-    
-#     # 绘制物品
-#     for i, p in enumerate(placements):
-#         x, y, z = p.pos
-#         dl, dw, dh = p.dim
-#         color = f"rgb({random.randint(50,200)},{random.randint(50,200)},{random.randint(50,200)})"
-#         fig.add_trace(go.Mesh3d(x=[x,x+dl,x+dl,x,x,x+dl,x+dl,x], y=[y,y,y+dw,y+dw,y,y,y+dw,y+dw], z=[z,z,z,z,z+dh,z+dh,z+dh,z+dh], i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2], j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3], k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6], color=color, opacity=0.7, name=f"SKU {i+1}"))
-    
-#     fig.update_layout(scene=dict(aspectmode='data'), margin=dict(l=0, r=0, b=0, t=0))
-#     return fig
-
+# if __name__ == 'main':
 # ====================== Streamlit 界面 ======================
 st.set_page_config(page_title="装箱计算器", layout="wide")
 st.title("📦 3D 智能装箱助手")
-
-# 3d装箱用-箱子行政规格长宽+0.5cm，底边不变
-BOX_SPECS = {
-    "饰品1号箱": (17.5, 20.5, 3.5),
-    "饰品2号箱": (25.5, 25.0, 10.0),
-    "小1号箱": (27.5, 24.5, 20.0),
-    "1号箱": (30.5, 28.5, 22.0),
-    "2号箱": (30.5, 27.5, 28.0),
-    "16号箱2+1": (34.5, 28.5, 30.0),
-    "3号箱": (38.0, 30.0, 32.0),
-    "17号箱3+1": (39.5, 32.5, 32.0),
-    "4号箱": (41.5, 35.5, 28.5),
-    "18号箱4+1": (43.5, 38.5, 32.0),
-    "14号箱": (45.5, 40.5, 35.0),
-    "14+3": (54.0, 49.0, 27.0),
-    "14+1": (55.5, 50.5, 28.5),
-    "5号箱": (55.5, 50.5, 30.0),
-    "5+1": (57.5, 51.5, 32.0)
-}
-
-BOXES = [BoxType(name, *dims) for name, dims in BOX_SPECS.items()]
 
 with st.sidebar:
     st.header("输入物品参数 (mm)")
@@ -287,7 +306,7 @@ if 'all_res' not in st.session_state:
 
 # 2. 当点击“寻找箱型”时，将结果存入 session_state
 if btn:
-    l_cm, w_cm, h_cm = math.ceil(in_l/10), math.ceil(in_w/10), math.ceil(in_h/10)
+    l_cm, w_cm, h_cm = in_l/10, in_w/10, in_h/10
     best, all_res = pack_across_boxes(BOXES, [SKU("Item", l_cm, w_cm, h_cm, int(in_q))])
     st.session_state.best_res = best
     st.session_state.all_res = all_res
@@ -319,4 +338,3 @@ if st.session_state.best_res:
                 st.caption("📱 手机提示：单指旋转，双指捏合缩放，双指拖动平移。")
         else:
             st.info("请点击上方按钮加载 3D 交互式视图")
-
